@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Embedder Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --sidebar-width: 260px;
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --border-color: #e5e7eb;
+            --text-dark: #1f2937;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            background-color: var(--bg-color);
+            overflow: hidden;
+        }
+
+        /* Left History Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: #ffffff;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .clear-btn {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .clear-btn:hover {
+            text-decoration: underline;
+        }
+
+        .history-list {
+            list-style: none;
+            overflow-y: auto;
+            flex-grow: 1;
+            padding: 8px;
+        }
+
+        .history-item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.9rem;
+            color: #4b5563;
+            margin-bottom: 4px;
+            transition: background 0.2s;
+        }
+
+        .history-item:hover {
+            background-color: #f3f4f6;
+            color: var(--primary-color);
+        }
+
+        .empty-history {
+            text-align: center;
+            color: #9ca3af;
+            font-size: 0.85rem;
+            margin-top: 20px;
+        }
+
+        /* Main Content Container */
+        .main-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        /* Top Bar Controls */
+        .top-bar {
+            padding: 12px 20px;
+            background-color: #ffffff;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .url-input {
+            flex-grow: 1;
+            padding: 10px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .url-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .go-btn {
+            background-color: var(--primary-color);
+            color: #ffffff;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .go-btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        /* Web Viewport Embedder */
+        .viewport-wrapper {
+            flex-grow: 1;
+            background-color: #ffffff;
+            position: relative;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .placeholder-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #6b7280;
+        }
+
+        .placeholder-message h2 {
+            margin-bottom: 8px;
+            color: var(--text-dark);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Left Sidebar: History Tab -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <span>History</span>
+            <button class="clear-btn" id="clearBtn">Clear All</button>
+        </div>
+        <ul class="history-list" id="historyList">
+            <!-- Dynamic history items loaded via JS -->
+        </ul>
+    </aside>
+
+    <!-- Right Side: Navigation & Embedded Iframe -->
+    <main class="main-container">
+        <div class="top-bar">
+            <input type="text" id="urlInput" class="url-input" placeholder="Enter website URL (e.g., https://example.com)..." />
+            <button id="goBtn" class="go-btn">Go</button>
+        </div>
+
+        <div class="viewport-wrapper">
+            <div id="placeholder" class="placeholder-message">
+                <h2>No Site Loaded</h2>
+                <p>Type a URL above and click <strong>Go</strong> to embed a webpage.</p>
+            </div>
+            <iframe id="webViewport" style="display: none;"></iframe>
+        </div>
+    </main>
+
+    <script>
+        const urlInput = document.getElementById('urlInput');
+        const goBtn = document.getElementById('goBtn');
+        const webViewport = document.getElementById('webViewport');
+        const placeholder = document.getElementById('placeholder');
+        const historyList = document.getElementById('historyList');
+        const clearBtn = document.getElementById('clearBtn');
+
+        // Load visual history list from local storage on load
+        let searchHistory = JSON.parse(localStorage.getItem('embedder_history')) || [];
+
+        function init() {
+            updateHistoryUI();
+            
+            // Event listeners
+            goBtn.addEventListener('click', loadUrlFromInput);
+            urlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') loadUrlFromInput();
+            });
+            clearBtn.addEventListener('click', clearHistory);
+        }
+
+        function loadUrlFromInput() {
+            let url = urlInput.value.trim();
+            if (!url) return;
+
+            // Automatically prepend protocol if missing
+            if (!/^https?:\/\//i.test(url)) {
+                url = 'https://' + url;
+            }
+
+            navigateToUrl(url);
+        }
+
+        function navigateToUrl(url) {
+            // Update iframe and view states
+            placeholder.style.display = 'none';
+            webViewport.style.display = 'block';
+            webViewport.src = url;
+            urlInput.value = url;
+
+            // Save to history log
+            addToHistory(url);
+        }
+
+        function addToHistory(url) {
+            // Filter duplicates to bubble the latest site to top
+            searchHistory = searchHistory.filter(item => item !== url);
+            searchHistory.unshift(url);
+            
+            // Cap history to 50 entries
+            if (searchHistory.length > 50) searchHistory.pop();
+
+            localStorage.setItem('embedder_history', JSON.stringify(searchHistory));
+            updateHistoryUI();
+        }
+
+        function updateHistoryUI() {
+            historyList.innerHTML = '';
+
+            if (searchHistory.length === 0) {
+                historyList.innerHTML = '<li class="empty-history">No history yet</li>';
+                return;
+            }
+
+            searchHistory.forEach(url => {
+                const li = document.createElement('li');
+                li.className = 'history-item';
+                li.textContent = url.replace(/^https?:\/\/(www\.)?/, ''); // Shorthand view text
+                li.title = url; // Tooltip shows full URL
+                li.addEventListener('click', () => navigateToUrl(url));
+                historyList.appendChild(li);
+            });
+        }
+
+        function clearHistory() {
+            searchHistory = [];
+            localStorage.removeItem('embedder_history');
+            updateHistoryUI();
+        }
+
+        // Run dashboard initialization
+        init();
+    </script>
+</body>
+</html>
+
+
