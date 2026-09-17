@@ -36,6 +36,11 @@
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .sidebar.hidden {
+            margin-left: calc(-1 * var(--sidebar-width));
         }
 
         .sidebar-header {
@@ -110,6 +115,11 @@
             display: flex;
             gap: 12px;
             align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .top-bar.hidden {
+            display: none;
         }
 
         .url-input {
@@ -143,11 +153,66 @@
             background-color: var(--primary-hover);
         }
 
+        .fullscreen-btn {
+            background-color: #4b5563;
+            color: #ffffff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .fullscreen-btn:hover {
+            background-color: #374151;
+        }
+
+        /* Requested Yellow Highlight Banner */
+        .school-banner {
+            background-color: #fef08a; /* Soft, readable yellow */
+            color: #713f12; /* Dark yellow/brown text for high contrast accessibility */
+            padding: 12px 20px;
+            margin: 12px 20px 0 20px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            line-height: 1.4;
+            border: 1px solid #fde047;
+            text-align: center;
+        }
+        
+        .school-banner a {
+            color: #1d4ed8;
+            font-weight: 600;
+            text-decoration: underline;
+        }
+
         /* Web Viewport Embedder */
         .viewport-wrapper {
             flex-grow: 1;
             background-color: #ffffff;
             position: relative;
+            margin: 12px 20px 20px 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        /* Expanded Mode Styling */
+        .main-container.fullscreen-mode .school-banner {
+            display: none;
+        }
+        
+        .main-container.fullscreen-mode .viewport-wrapper {
+            margin: 0;
+            border: none;
+            border-radius: 0;
         }
 
         iframe {
@@ -169,12 +234,38 @@
             margin-bottom: 8px;
             color: var(--text-dark);
         }
+
+        /* Floating Exit button for Fullscreen */
+        .exit-fullscreen-btn {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            background-color: rgba(31, 41, 55, 0.85);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.85rem;
+            display: none;
+            z-index: 9999;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        
+        .exit-fullscreen-btn:hover {
+            background-color: rgba(17, 24, 39, 0.95);
+        }
     </style>
 </head>
 <body>
 
+    <!-- Floating Exit Button for full window override -->
+    <button id="exitFullscreenBtn" class="exit-fullscreen-btn">Exit Full Screen (Esc)</button>
+
     <!-- Left Sidebar: History Tab -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <span>History</span>
             <button class="clear-btn" id="clearBtn">Clear All</button>
@@ -185,10 +276,18 @@
     </aside>
 
     <!-- Right Side: Navigation & Embedded Iframe -->
-    <main class="main-container">
-        <div class="top-bar">
+    <main class="main-container" id="mainContainer">
+        <div class="top-bar" id="topBar">
             <input type="text" id="urlInput" class="url-input" placeholder="Enter website URL (e.g., https://example.com)..." />
             <button id="goBtn" class="go-btn">Go</button>
+            <button id="fullscreenBtn" class="fullscreen-btn">
+                <span>⛶</span> Full Screen
+            </button>
+        </div>
+
+        <!-- School Warning Yellow Banner -->
+        <div class="school-banner">
+            This is a basic web embedder made so that you can get past our school's blocking system. But it doesn't work with bigger websites (Google, YouTube, Discord, Etc.) So if you want that make sure to use <a href="https://browser.lol" target="_blank" rel="noopener noreferrer">Browser.lol</a>
         </div>
 
         <div class="viewport-wrapper">
@@ -207,6 +306,13 @@
         const placeholder = document.getElementById('placeholder');
         const historyList = document.getElementById('historyList');
         const clearBtn = document.getElementById('clearBtn');
+        
+        // Fullscreen elements
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        const sidebar = document.getElementById('sidebar');
+        const topBar = document.getElementById('topBar');
+        const mainContainer = document.getElementById('mainContainer');
 
         // Load visual history list from local storage on load
         let searchHistory = JSON.parse(localStorage.getItem('embedder_history')) || [];
@@ -219,72 +325,6 @@
             urlInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') loadUrlFromInput();
             });
-            clearBtn.addEventListener('click', clearHistory);
-        }
 
-        function loadUrlFromInput() {
-            let url = urlInput.value.trim();
-            if (!url) return;
-
-            // Automatically prepend protocol if missing
-            if (!/^https?:\/\//i.test(url)) {
-                url = 'https://' + url;
-            }
-
-            navigateToUrl(url);
-        }
-
-        function navigateToUrl(url) {
-            // Update iframe and view states
-            placeholder.style.display = 'none';
-            webViewport.style.display = 'block';
-            webViewport.src = url;
-            urlInput.value = url;
-
-            // Save to history log
-            addToHistory(url);
-        }
-
-        function addToHistory(url) {
-            // Filter duplicates to bubble the latest site to top
-            searchHistory = searchHistory.filter(item => item !== url);
-            searchHistory.unshift(url);
-            
-            // Cap history to 50 entries
-            if (searchHistory.length > 50) searchHistory.pop();
-
-            localStorage.setItem('embedder_history', JSON.stringify(searchHistory));
-            updateHistoryUI();
-        }
-
-        function updateHistoryUI() {
-            historyList.innerHTML = '';
-
-            if (searchHistory.length === 0) {
-                historyList.innerHTML = '<li class="empty-history">No history yet</li>';
-                return;
-            }
-
-            searchHistory.forEach(url => {
-                const li = document.createElement('li');
-                li.className = 'history-item';
-                li.textContent = url.replace(/^https?:\/\/(www\.)?/, ''); // Shorthand view text
-                li.title = url; // Tooltip shows full URL
-                li.addEventListener('click', () => navigateToUrl(url));
-                historyList.appendChild(li);
-            });
-        }
-
-        function clearHistory() {
-            searchHistory = [];
-            localStorage.removeItem('embedder_history');
-            updateHistoryUI();
-        }
-
-        // Run dashboard initialization
-        init();
-    </script>
-</body>
-</html>
 
 
